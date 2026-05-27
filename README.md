@@ -58,24 +58,35 @@ for rule in get_rules("full"):
 |---|---|
 | `minimal` | AWS access key |
 | `aws` | AWS access key |
-| `full` | AWS access key, Stripe secret key, generic high-entropy secret |
+| `cloud` | GitHub PAT, GCP service-account key, Azure DevOps PAT, OpenAI, Hugging Face, Anthropic |
+| `full` | All of the above: AWS, Stripe, generic high-entropy, plus the six `cloud` rules |
 
 ```python
 from necromancer_patterns import available_pattern_sets
-available_pattern_sets()  # ['minimal', 'aws', 'full']
+available_pattern_sets()  # ['minimal', 'aws', 'cloud', 'full']
 ```
 
 ## Rules
 
-| `rule_id` | Detects |
-|---|---|
-| `aws-access-key-id` | AWS access keys (`AKIA`/`ASIA`/… + 16 base32 chars) |
-| `stripe-secret-key` | Stripe secret keys (`sk_live_` / `sk_test_` + body) |
-| `generic-high-entropy-secret` | High-entropy values assigned to credential-like keys, excluding UUIDs and git SHAs, above a Shannon-entropy floor |
+Each rule carries a `severity` of `CRITICAL` (tokens granting broad account
+access) or `HIGH` (scoped service/API tokens).
 
-Provider rules use strict prefixes/anchors so placeholder look-alikes do not
-match. The generic rule only inspects tokens presented as secrets (assigned to a
-`secret`/`token`/`api_key`/… key) and entropy-validates the value.
+| `rule_id` | Severity | Detects |
+|---|---|---|
+| `aws-access-key-id` | CRITICAL | AWS access keys (`AKIA`/`ASIA`/… + 16 base32 chars) |
+| `stripe-secret-key` | CRITICAL | Stripe secret keys (`sk_live_` / `sk_test_` + body) |
+| `generic-high-entropy-secret` | HIGH | High-entropy values assigned to credential-like keys, excluding UUIDs and git SHAs, above a Shannon-entropy floor |
+| `github-pat` | CRITICAL | GitHub PATs — classic (`ghp_` + 36) and fine-grained (`github_pat_` + 82) |
+| `gcp-service-account-key` | CRITICAL | GCP service-account key JSON (`"type": "service_account"` co-located with `"private_key_id"`) |
+| `azure-devops-pat` | CRITICAL | Azure DevOps PATs (84-char base64-like string with the `AZDO` marker at positions 76–79) |
+| `openai-api-key` | HIGH | OpenAI keys — legacy (`sk-` + 48) and project-scoped (`sk-proj-` + 50+) |
+| `huggingface-token` | HIGH | Hugging Face access tokens (`hf_` + 37) |
+| `anthropic-api-key` | HIGH | Anthropic (Claude) API keys (`sk-ant-` + 93) |
+
+Provider rules use strict prefixes/anchors and fixed lengths so placeholder
+look-alikes do not match. The generic rule only inspects tokens presented as
+secrets (assigned to a `secret`/`token`/`api_key`/… key) and entropy-validates
+the value.
 
 ## Public API
 
@@ -84,11 +95,15 @@ from necromancer_patterns import (
     match,                  # match(text, pattern_set="full") -> list[Match]
     match_rule,             # match_rule(rule, text) -> Iterator[Match]
     Match,                  # rule_id, description, secret, start, end + to_dict()
-    Rule,                   # rule_id, description, regex, validator, secret_group
+    Rule,                   # rule_id, description, regex, severity, validator, secret_group
     get_rules,              # get_rules(pattern_set) -> list[Rule]
     available_pattern_sets, # -> list[str]
     shannon_entropy,        # shannon_entropy(value) -> float
+    SEVERITY_CRITICAL, SEVERITY_HIGH,
     AWS_ACCESS_KEY, STRIPE_SECRET_KEY, GENERIC_HIGH_ENTROPY,
+    GITHUB_PAT, GCP_SERVICE_ACCOUNT_KEY, AZURE_DEVOPS_PAT,
+    OPENAI_API_KEY, HUGGINGFACE_TOKEN, ANTHROPIC_API_KEY,
+    CLOUD_RULES,            # ordered list of the six cloud/dev-platform rules
 )
 ```
 
